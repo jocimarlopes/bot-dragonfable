@@ -23,7 +23,7 @@ LOGIN_URL = base64.b64decode('aHR0cHM6Ly9hY2NvdW50LmRyYWdvbmZhYmxlLmNvbS9Mb2dpbg
 PROXY = 'http://brd-customer-hl_ddb02df8-zone-data_center:a9unexspqppa@zproxy.lum-superproxy.io:22225'
 LIST_THREADS = []
 PERCENT = '0%'
-BOTS_NUMBER = 5
+BOTS_NUMBER = 10
 
 MAX_LIST_NUMBER = 0
 TOTAL_LIST_NUMBER = 0
